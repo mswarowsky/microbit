@@ -10,6 +10,7 @@ use rtt_target::rprintln;
 use cortex_m_rt::entry;
 
 use microbit::hal::{prelude::*, Timer};
+use micromath::F32Ext;
 
 #[cfg(feature = "v1")]
 use microbit::{
@@ -26,14 +27,18 @@ use lsm303agr::{
     interface::I2cInterface, mode::MagOneShot, AccelMode, AccelOutputDataRate, Lsm303agr,
 };
 
+const PI : f32 = 3.14159265359;
+
 #[entry]
 fn main() -> ! {
     let board = microbit::Board::take().unwrap();
     let mut timer = Timer::new(board.TIMER0);
+    let mut x_damped : f32 = 0.1;
 
     rtt_target::rtt_init_print!();
 
     rprintln!("Start");
+    rprintln!("asin 1 {}", arc2degree((1.0).asin()));
 
     #[cfg(feature = "v1")]
     let i2c = { twi::Twi::new(board.TWI0, board.i2c.into(), FREQUENCY_A::K100) };
@@ -53,21 +58,21 @@ fn main() -> ! {
     rprintln!("normal mode");
     sensor.set_accel_mode(AccelMode::Normal).unwrap();
     timer.delay_ms(1000_u32);
-    get_data(&mut sensor);
+    get_data(&mut sensor, &mut x_damped);
 
     rprintln!("low power mode");
     sensor.set_accel_mode(AccelMode::LowPower).unwrap();
     timer.delay_ms(1000_u32);
-    get_data(&mut sensor);
+    get_data(&mut sensor, &mut x_damped);
 
     rprintln!("high resolution mode");
     sensor.set_accel_mode(AccelMode::HighResolution).unwrap();
     timer.delay_ms(1000_u32);
-    get_data(&mut sensor);
+    get_data(&mut sensor, &mut x_damped);
 
     loop {
-        timer.delay_ms(100_u32);
-        get_data(&mut sensor);
+        timer.delay_ms(500_u32);
+        get_data(&mut sensor, &mut x_damped);
     }
 }
 
@@ -77,12 +82,31 @@ type Sensor = Lsm303agr<I2cInterface<twi::Twi<TWI0>>, MagOneShot>;
 #[cfg(feature = "v2")]
 type Sensor = Lsm303agr<I2cInterface<twim::Twim<TWIM0>>, MagOneShot>;
 
-fn get_data(sensor: &mut Sensor) {
+
+fn get_data(sensor: &mut Sensor, old_x : &mut f32) {
     loop {
         if sensor.accel_status().unwrap().xyz_new_data {
             let data = sensor.accel_data().unwrap();
-            rprintln!("x {} y {} z {}", data.x, data.y, data.z);
+            let sensivity : f32 = 980.0;
+            let x = (data.x as f32) / sensivity;
+            // let mut y = data.y as f32 / sensivity;
+            *old_x = *old_x * 0.9 + x.abs() * 0.1;
+            *old_x = limit(*old_x, 1.0);
+            rprintln!("x {} y {} z {} wx {}", data.x, data.y, data.z, arc2degree(old_x.asin()));
             return;
         }
+    }
+}
+
+
+fn arc2degree(arc : f32) -> f32 {
+    return (arc/PI)*180.0
+}
+
+fn limit(a : f32, limit: f32) -> f32 {
+    if a > limit {
+        return limit;
+    } else {
+        return a;
     }
 }

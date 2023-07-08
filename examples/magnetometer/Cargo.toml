@@ -13,6 +13,7 @@ panic-rtt-target = { version = "*", features = ["cortex-m"]}
 lsm303agr = "0.2.0"
 rtt-target = "0.4.0"
 # panic-probe = { version = "0.2", features = ["print-rtt"] }
+micromath = "*"
 
 [dependencies.microbit]
 path = "../../microbit"
